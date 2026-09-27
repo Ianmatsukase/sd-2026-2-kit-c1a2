@@ -27,6 +27,7 @@ def main():
 
         print(f"[worker] processando {tarefa['id']}")
         inicio = time.time()
+        tamanho = len(tarefa["texto"].encode("utf-8"))
         try:
             resultado = modelo.prever(tarefa["texto"])
             resultado["status"] = "pronto"
@@ -34,13 +35,34 @@ def main():
 
             # TAREFA 3: guarde o resultado para o cliente consultar depois.
             # DICA: fila.guardar_resultado(tarefa["id"], resultado)
-            raise NotImplementedError("guarde o resultado na TAREFA 3")
+            fila.guardar_resultado(tarefa["id"], resultado)
+            tempo_ms = round((time.time() - inicio) * 1000, 2)
+
+            print(
+                f"[worker] id={tarefa['id']} "
+                f"entrada={tamanho}B "
+                f"tempo_ms={tempo_ms}"
+            )
 
         except NotImplementedError:
             raise
         except Exception as erro:  # noqa: BLE001
-            # TAREFA 5: retentativa + dead-letter em vez de so registrar.
-            print(f"[worker] ERRO em {tarefa['id']}: {erro}")
+            tentativas = tarefa.get("tentativas", 0) + 1
+            tarefa["tentativas"] = tentativas
+
+            print(
+                f"[worker] ERRO em {tarefa['id']} "
+                f"(tentativa {tentativas}/3): {erro}"
+            )
+
+            if tentativas < 3:
+                fila.cliente().rpush(
+                    fila.FILA_TAREFAS,
+                    __import__("json").dumps(tarefa)
+                )
+            else:
+                fila.enviar_dead_letter(tarefa)
+                print(f"[worker] tarefa {tarefa['id']} enviada para dead-letter")
 
 
 if __name__ == "__main__":

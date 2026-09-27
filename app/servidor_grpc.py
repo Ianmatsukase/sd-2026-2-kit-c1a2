@@ -9,6 +9,8 @@ O QUE VOCE PRECISA FAZER (TAREFAS.md, item 4): o metodo PreverLote.
 Rodar:  python -m app.servidor_grpc
 """
 from concurrent import futures
+import time
+import uuid
 
 import grpc
 
@@ -33,14 +35,58 @@ class ServicoInferencia(inferencia_pb2_grpc.InferenciaServicer):
         print("[grpc] modelo pronto")
 
     def Prever(self, request, context):
+        inicio = time.time()
+        requisicao_id = str(uuid.uuid4())
+
+        tamanho = len(request.texto.encode("utf-8"))
+
         r = self.modelo.prever(request.texto)
-        return inferencia_pb2.RespostaPrever(
-            texto=r["texto"], sentimento=r["sentimento"], confianca=r["confianca"]
+
+        tempo_ms = round((time.time() - inicio) * 1000, 2)
+
+        print(
+            f"[grpc] id={requisicao_id} "
+            f"entrada={tamanho}B "
+            f"tempo_ms={tempo_ms}"
         )
 
-    # TAREFA 4: implemente PreverLote, recebendo varios textos de uma vez.
-    # def PreverLote(self, request, context):
-    #     ...
+        return inferencia_pb2.RespostaPrever(
+            texto=r["texto"],
+            sentimento=r["sentimento"],
+            confianca=r["confianca"]
+        )
+
+    def PreverLote(self, request, context):
+        inicio = time.time()
+        requisicao_id = str(uuid.uuid4())
+
+        tamanho = sum(
+            len(texto.encode("utf-8"))
+            for texto in request.textos
+        )
+
+        resultados = []
+
+        for texto in request.textos:
+            r = self.modelo.prever(texto)
+
+            resultados.append(
+                inferencia_pb2.RespostaPrever(
+                    texto=r["texto"],
+                    sentimento=r["sentimento"],
+                    confianca=r["confianca"]
+                )
+            )
+
+        tempo_ms = round((time.time() - inicio) * 1000, 2)
+
+        print(
+            f"[grpc] id={requisicao_id} "
+            f"entrada={tamanho}B "
+            f"tempo_ms={tempo_ms}"
+        )
+
+        return inferencia_pb2.RespostaLote(resultados=resultados)
 
 
 def servir(porta: int = 50051):

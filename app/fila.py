@@ -12,6 +12,7 @@ import redis
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 FILA_TAREFAS = "tarefas"
+FILA_DEAD_LETTER = "tarefas_dead_letter"
 PREFIXO_RESULTADO = "resultado:"
 
 _cliente = None
@@ -51,3 +52,7 @@ def guardar_resultado(tarefa_id: str, resultado: dict) -> None:
 def buscar_resultado(tarefa_id: str):
     bruto = cliente().get(PREFIXO_RESULTADO + tarefa_id)
     return json.loads(bruto) if bruto else None
+
+def enviar_dead_letter(tarefa: dict) -> None:
+    """Envia uma tarefa que falhou após as tentativas para a fila de descarte."""
+    cliente().rpush(FILA_DEAD_LETTER, json.dumps(tarefa))
